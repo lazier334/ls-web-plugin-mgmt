@@ -37,7 +37,7 @@ import { defineComponent, h, ref, computed, onMounted } from "vue";
 import RequestAnalysisPage from './RequestAnalysisPage.vue'; // 你要创建的分析页面组件
 
 // 创建表格列定义
-function createColumns({ play, showPlugin, switchPlugin }) {
+function createColumns({ showPlugin, switchPlugin, deletePlugin }) {
   return [
     {
       title: "No",
@@ -101,6 +101,17 @@ function createColumns({ play, showPlugin, switchPlugin }) {
                 onClick: () => switchPlugin ? switchPlugin(row) : null
               },
               { default: () => row.exclude ? "启用" : "禁用" }
+            ),
+            // 新增删除按钮
+            h(
+              NButton,
+              {
+                strong: true,
+                type: "error", // 可选，用于区分按钮类型
+                size: "small",
+                onClick: () => deletePlugin ? deletePlugin(row) : null
+              },
+              { default: () => "删除" }
             )
           ]
         );
@@ -190,12 +201,6 @@ export default defineComponent({
       }
     };
 
-    // 播放操作
-    const play = (row) => {
-      analysisData.value.filepath = row.filepath;
-      message.info(`已选择 ${row.filepath}`);
-      activeTab.value = 'analysis';
-    };
     const showPlugin = (row) => {
       analysisData.value.filepath = row.filepath;
       message.info(`已选择 ${row.filepath}`);
@@ -206,8 +211,8 @@ export default defineComponent({
     const switchPlugin = async (row) => {
       // 弹窗显示具体信息
       try {
-        const filepathList = [];
-        const selectList = [];
+        let filepathList = [];
+        let selectList = [];
         if (row) {
           filepathList.push(row.filepath);
           selectList.push(row);
@@ -235,9 +240,48 @@ export default defineComponent({
         const result = await response.json();
         // 只更新当前的列表
         selectList.forEach(r => r.exclude = !r.exclude);
+        message.success('操作成功' + selectList.length);
       } catch (error) {
-        console.error('获取数据失败:', error);
-        message.error('数据加载失败，请重试');
+        console.error('操作失败:', error);
+        message.error('操作失败，请重试');
+      } finally {
+      }
+    };
+
+    // 查看详情
+    const deletePlugin = async (row) => {
+      // 弹窗显示具体信息
+      try {
+        let filepathList = [row.filepath];
+        // 调用API接口
+        const response = await fetch('/plugin-mgmt/api/remove', {
+          method: 'POST',                    // 指定请求方法为 POST
+          headers: {
+            'Content-Type': 'application/json', // 告诉服务器发送的是 JSON
+          },
+          body: JSON.stringify({ filepathList })
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        message.success(`已删除 ${result.data.success.length}${0 < result.data.failure.length
+          ? (' 删除失败' + 0 < result.data.failure.length) : ''}`);
+
+        // 找到数据并将其删除
+        filepathList.forEach(fp => {
+          for (let i = 0; i < data.value.length; i++) {
+            const e = data.value[i];
+            if (e.filepath == fp) {
+              data.value.splice(i, 1);
+              break;
+            }
+          }
+        });
+      } catch (error) {
+        console.error('删除数据失败:', error);
+        debugger
+        message.error('删除数据失败，请重试');
       } finally {
       }
     };
@@ -256,14 +300,15 @@ export default defineComponent({
 
     return {
       data,
-      columns: createColumns({ play, showPlugin, switchPlugin }),
+      columns: createColumns({ showPlugin, switchPlugin, deletePlugin }),
       pagination: paginationReactive,
       loading,
       fetchData,
       scrollToBottom,
       activeTab,
       analysisData,
-      switchPlugin
+      switchPlugin,
+      deletePlugin,
     };
   }
 });
